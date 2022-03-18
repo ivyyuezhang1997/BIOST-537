@@ -1,0 +1,223 @@
+---
+title: "BIOST 537 Problem Set 3"
+author: "Ivy Zhang"
+date: "2/10/2022"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r include = FALSE}
+knitr::opts_chunk$set(message = F, warning = F)
+```
+
+# Problem 1
+
+## (a)
+
+Suppose Z = 1 corresponds to the participants are in the treatment group, and Z = 0 corresponds to the participants are in the control group. 
+
+We fit the proportional hazards model with 
+
+$$h(t|Z = 1) = h_0(t) \times exp(\beta)$$
+where $h_0(t)$ is the baseline hazard corresponding to the Z = 0(control group) Therefore, under this model we assume 
+
+$$ exp(\beta) = \frac{h(t|Z_1 =1)}{h(t|Z_1 = 0)}$$
+for all t. 
+
+```{r}
+library(readr)
+library(survival)
+library(KMsurv)
+ccg <- read_csv("~/Desktop/R hw/ccg803.csv")[,-1]
+s.ccg = with(ccg, Surv(duration, relapse))
+coxtrt = coxph(s.ccg ~ rx, data = ccg)
+summary(coxtrt)
+```
+
+We estimate that $\beta$ equals to -0.303 and the hazard of relapse for the treatment group is estimated to be $e^{-0.303}$ =0.738 times as compared to the control group hazard. 
+
+The 95% confidence interval for the log-hazerd beta ratio $\beta$ is 
+$$ -0.3034 \pm 1.96 \times 0.1505 = [-0.598,-0.008] $$
+
+Exponentiating gives a 95% CI for the hazard ratio exp($\beta$):
+$$[e^{-0.598},e^{-0.008}] = [0.550, 0.992]$$
+
+This interval does not contain 1, indicating the effect of treatment is significant at the level of 0.05 using the Wald Test. Based on the output of the summary function, we can see the effect of treatment is also significant at the level of 0.05 using the Score test, but not significant when using the Likelihood ratio test(p = 0.05).
+
+
+## (b)
+Suppose $Z_1$ = 1 corresponds to the participants are in the treatment group, and $Z_1$ = 0 corresponds to the participants are in the control group. Then $Z_2$, $Z_3$ corresponds to the white blood cell counts and age. 
+
+We fit the proportional hazards model with 
+
+$$h(t|Z_1 = z_1, Z_2 = z_2, Z_3 = z_3) = h_0(t) \times exp(\beta_1 \times z_1 + \beta_2 \times z_2 + \beta_3 \times z_3)$$
+
+where $h_0(t)$ is the baseline hazard corresponding to the $Z_1$ = 0(control group), and $Z_2 = 0$ and $Z_3 = 0$.
+```{r}
+coxtrt.adjust.1 = coxph(s.ccg~rx+wbc+age, data = ccg)
+summary(coxtrt.adjust.1)
+```
+
+From the previous summary, we estimated that hazard ratio of getting relapse comparing participants in the treatment group to controls adjusting for white blood cells count and age is $e^{-0.296} = 0.7435$. The 95% CI of the estimated hazard ratio is [0.553,0.999] based on the previous output, and also can be calculated by the process in part(a). Using the Wald test giving us a p-value of 0.0492, we reject the null hypothesis that the hazard ratio of getting relapse is same for people in treatment group and control group adjusting for the white blood cell count and age equals to 1 at the significance level of 0.05. 
+
+We also estimated that comparing participants who are in the same treatment group (meaning whether both in treatment or both in control group) and have same white blood cell counts but differed in one year of age, the hazard ratio of people getting relapse is 1.005, with younger people have less risk. The 95% CI of the estimated hazard ratio is [0.961, 1.051] based on the previous output. Based on the Wald p-value of 0.843, we conclude that this data does not offer evidence to support the association is significant at the significance level of 0.05. 
+
+We also estimated that comparing participants who are having same age and in the same treatment group(meaning whether both in treatment or both in control group) but differ in one unit of white blood cell count (white blood cell count of 100), the hazard ratio of people getting relapse is 1.0004 with people who have higher blood cell count having higher hazard. The 95% CI of the estimated hazard ratio is [1.0002, 1.0005] based on the previous output. Based on the Wald test, the p value is smaller than 0.01, therefore we conclude that we are rejecting the null hypothesis that white blood cell count is not associated with the relapse hazard adjusting for the age and the treatment at the significance level of 0.05. 
+
+## (c)
+
+Suppose $Z_1$ = 1 corresponds to the participants are in the treatment group, and $Z_1$ = 0 corresponds to the participants are in the control group. Then $Z_2$ corresponds to the age. Suppose $Z_3$ = 1 corresponds to the participants are having the white blood cell count that is over 10,000 (wbc $\ge$ 100) and $Z_3$ = 0 corresponds to the participants are having the white blood cell count that is less than 10,000 (wbc < 100).
+
+We fit the proportional hazards model with 
+
+$$h(t|Z_1 = z_1, Z_2 = z_2, Z_3 = z_3) = h_0(t) \times exp(\beta_1\times z_1 +\beta_2 \times z_2 +\beta_3 \times z_3 +\beta_4 \times z_1z_3)$$
+where $h_0(t)$ is the baseline hazard corresponding to the $Z_1$ = 0(control group), and $Z_2 = 0$ years old and $Z_3 = 0$ (wbc < 100).
+
+```{r}
+library(msm)
+ccg$high_wbc = ifelse(ccg$wbc<100,0,1)
+coxtrt.adjust.2 = coxph(s.ccg~high_wbc*rx + age, data = ccg)
+summary(coxtrt.adjust.2)
+trt.est = sum(coef(coxtrt.adjust.2)[c(2,4)])
+trt.se = deltamethod(g = ~(x1+x2),mean = coef(coxtrt.adjust.2)[c("rx", "high_wbc:rx")],
+                     cov = vcov(coxtrt.adjust.2)[c("rx", "high_wbc:rx"),c("rx", "high_wbc:rx")])
+exp(trt.est+c(-1,0,1)*1.96*trt.se)
+```
+
+We estimated that the inside the population who have white blood cell counts that is lower than 10,000, the hazard ratio comparing individuals in the treatment group to those individuals in the control group is 0.775. The 95% CI of the estimated ratio is [0.481, 1.248] based on the previous ouput. Based on the Wald test, we have a p-value of 0.294. Therefore, we fail to reject the null hypothesis that the treatment is not associated with the hazard at the significance level of 0.05. 
+
+We estimated that inside the population who have white blood cell counts that is higher than 10,000, the hazard ratio comparing the individuals in the treatment group to those individuals in the control group is 0.815. The 95% of the estimated ratio is [0.559, 1.189] based on the previous output. Based on the wald confidence interval, the 95% confidence interval contains 1, we fail to reject the null hypothesis that the treatment is not associated with the participants' hazard at the significance level of 0.05. 
+
+In order to test the hypothesis that this association does not differ in these two subpopulations, we can use the Wald test to see whether the interaction term is significant. The Wald test is giving us a p-value of 0.870 for the interaction term. Therefore, we fail to reject the null hypothesis that the association does not differ in these two populations at the significance level of 0.05. 
+
+
+## (d)
+Suppose $Z_1$ = 1 corresponds to the participants are in the treatment group, and $Z_1$ = 0 corresponds to the participants are in the control group. Then $Z_2$, $Z_3$ corresponds to the white blood cell counts and age. We also use Ins to denominate the institution. 
+
+We fit the proportional hazards model with 
+
+$$h(t|Z_1 = z_1, Z_2 = z_2, Z_3 = z_3,Ins) = h_0(t|Ins) \times exp(\beta_1 \times z_1 + \beta_2 \times z_2 + \beta_3 \times z_3)$$
+where $h_0(t|Ins)$ is the baseline hazard corresponding to the $Z_1$ = 0(control group), and $Z_2 = 0$ years old and $Z_3 = 0$ (wbc < 100) corresponding to the institution INS.
+```{r}
+coxtrt.adjust.3 = coxph(s.ccg~rx+wbc+age+strata(institution), data = ccg)
+summary(coxtrt.adjust.3)
+```
+
+From the previous summary, we estimated that hazard ratio of getting relapse comparing participants in the treatment group to controls but at the same recruitment site adjusting for white blood cells count and age is 0.710. The 95% CI of the estimated hazard ratio is [0.520,0.969] based on the previous output, and also can be calculated by the process in part(a). Using the Wald test giving us a p-value of 0.031, we reject the null hypothesis that the hazard ratio of getting relapse is same for people in treatment group and control group but at the same recruitment site adjusting for the white blood cell count and age equale to 1 at the significance level of 0.05. 
+
+We also estimated that comparing participants who are in the same treatment group (meaning whether both in treatment or both in control group), have same white blood cell counts and at the same recruitment site but differed in one year of age, the hazard ratio of people getting relapse is 0.996, with people who are younger have higher risk. The 95% CI of the estimated hazard ratio is [0.950, 1.045] based on the previous output. Based on the Wald p-value of 0.865, we conclude that this data does not offer evidence to support the association is significant at the significance level of 0.05. 
+
+We also estimated that comparing participants who are having same age,at the same recruitment site and in the same treatment group(meaning whether both in treatment or both in control group) but differ in one unit of white blood cell count (white blood cell count of 100), the hazard ratio of people getting relapse is 1.0003 with people who have higher white blood cell count having higher risk. The 95% CI of the estimated hazard ratio is [1.0001, 1.0004] based on the previous output. Based on the Wald test, the p value is smaller than 0.01, therefore we conclude that we are rejecting the null hypothesis that white blood cell count is not associated with the relapse hazard adjusting for the age, the institution and the treatment at the significance level of 0.05. 
+
+
+## Part(e)
+
+```{r}
+plot(survfit(coxtrt.adjust.1, newdata = data.frame(age = 5, wbc = 40, rx = 1), conf.int = FALSE ),
+     col = "purple", lwd = 2)
+lines(survfit(coxtrt.adjust.1, newdata = data.frame(age = 5, wbc = 40, rx = 0),conf.int = FALSE),
+     col = "purple", lwd = 2,lty = 2)
+lines(survfit(coxtrt.adjust.1, newdata = data.frame(age = 5, wbc = 200, rx = 1),conf.int = FALSE),
+     col = "gold", lwd = 2)
+lines(survfit(coxtrt.adjust.1, newdata = data.frame(age = 5, wbc = 200, rx = 0),conf.int = FALSE),
+     col = "gold", lwd = 2, lty = 2)
+legend("topright", legend = c("5 year-old treated patients with wbc = 40",
+                              "5 year-old control patients with wbc = 40",
+                              "5 year-old treated patients with wbc = 200",
+                              "5 year-old control patients with wbc = 200"),
+       col = c("purple","purple","gold","gold"),
+       lty = c(1,2,1,2))
+
+```
+
+
+# Problem 2
+
+## Part(a)
+
+Suppose $Z_1$ = 1 corresponds to the participants methadone dosage. $Z_2 = 0$ corresponds to the participant does not have a history of incarceration and $Z_2 = 1$ corresponds to the participant had a history of incarceration. $Z_3$ corresponds to the clinic. 
+
+We fit the proportional hazards model with 
+
+$$h(t|Z_1 = z_1, Z_2 = z_2, Z_3 = z_3) = h_0(t) \times exp(\beta_1 \times z_1 + \beta_2 \times z_2 + \beta_3 \times z_3)$$
+where $h_0(t)$ is the baseline hazard corresponding to the $Z_1$ = 0, and $Z_2 = 0$.
+
+```{r}
+meth <- read_csv("~/Desktop/R hw/methadone-1.csv") [,-1]
+s.meth = with(meth, Surv(time, event))
+cox.meth.1 = coxph(s.meth~dose+prison+clinic, data = meth)
+summary(cox.meth.1)
+```
+
+We estimated that comparing participants who have same history status (meaning whether both in have or not) of incarceration and in the same clinic, but differed in daily maintenance methadone dose of 1 mg/day , the hazard ratio of people getting exit is 0.965 with people who are getting 1mg/day less of daily maintenance methadone dose having higher risk. The 95% CI of the estimated hazard ratio is [0.953, 0.977] based on the previous output. Based on the Wald p-value that is smaller than 0.01, we conclude that this data does offer evidence to support the association is significant at the significance level of 0.05. 
+
+
+From the previous summary, we also estimated that hazard ratio of getting exit comparing participants who have history of incarceration to participants who does not but having same daily maintenance methadone dose and in the same clinic is 1.387. The 95% CI of the estimated hazard ratio is [0.999,1.924] based on the previous output. Using the Wald test giving us a p-value of 0.051, we fail to reject the null hypothesis that the hazard ratio of getting exit is same for people having different history status of incarceration but at the same clinic and having same daily maintenance methadone dose equals to 1 at the significance level of 0.05. 
+
+
+We also estimated that comparing participants who are having same daily maintenance methadone dose and having same history status of incarceration(meaning whether both in have or both do not have) but in the different clinic, the hazard ratio of people exit is 0.364 with participants from clinic 2 having smaller hazard. The 95% CI of the estimated hazard ratio is [0.239, 0.555] based on the previous output. Based on the Wald test, the p value is smaller than 0.01, therefore we conclude that we are rejecting the null hypothesis that clinic is not associated with the exit adjusting for the methadone dose and history of incarceration at the significance level of 0.05. 
+
+## Part(b)
+
+Suppose $Z_1$ = 1 corresponds to the participants methadone dosage. $Z_2 = 0$ corresponds to the participant does not have a history of incarceration and $Z_2 = 1$ corresponds to the participant had a history of incarceration. Cli corresponds to the clinic. 
+
+We fit the proportional hazards model with 
+
+$$h(t|Z_1 = z_1, Z_2 = z_2, Cli) = h_0(t|Cli) \times exp(\beta_1 \times z_1 + \beta_2 \times z_2)$$
+where $h_0(t|Cli)$ is the baseline hazard corresponding to the $Z_1$ = 0 mg/day of daily dose, and $Z_2 = 0$ with no history of prison with corresponding to the clinic Cli.
+```{r}
+cox.meth.2 = coxph(s.meth~dose+prison+strata(clinic), data = meth)
+summary(cox.meth.2)
+```
+
+We estimated that comparing participants who have same history status (meaning whether both in have or not) of incarceration and in the same clinic, but differed in daily maintenance methadone dose of 1 mg/day , the hazard ratio of people getting exit is 0.965 with people who are getting 1mg/day less of daily maintenance methadone dose having higher risk. The 95% CI of the estimated hazard ratio is [0.953, 0.978] based on the previous output. Based on the Wald p-value that is smaller than 0.01, we conclude that this data does offer evidence to support the association is significant at the significance level of 0.05. 
+
+
+From the previous summary, we also estimated that hazard ratio of getting exit comparing participants who have history of incarceration to participants who does not but having same daily maintenance methadone dose and in the same clinic is 1.476. The 95% CI of the estimated hazard ratio is [1.060, 2.056] based on the previous output. Using the Wald test giving us a p-value of 0.021, we reject the null hypothesis that the hazard ratio of getting exit is same for people having different history status of incarceration but at the same clinic and having same daily maintenance methadone dose equals to 1 at the significance level of 0.05. 
+
+The interpretation of hazard ratios related to the dose and history of previous incarceration do not changed although we decided to stratified the clinic factor. We cannot interpret the hazard ratios comparing participants in different clinic adjusting for the dose and previous incarceration history anymore. There is no requirement of proportionality across levels of clinic. This model provides no concise measure of association between the hazard and clinic. However, stratifying the clinic factor allowed us to have a more flexible model but may lead to the less precise estimation. 
+
+## Part(c)
+Suppose $Z_1$ = 1 corresponds to the participants methadone dosage. $Z_2 = 0$ corresponds to the participant does not have a history of incarceration and $Z_2 = 1$ corresponds to the participant had a history of incarceration. Cli corresponds to the clinic. 
+
+We fit the proportional hazards model with 
+
+$$h(t|Z_1 = z_1, Z_2 = z_2, Cli) = h_0(t|Cli) \times exp(\beta_1 \times z_1 + \beta_2 \times z_2+\beta_3 \times z_1 \times z_2)$$
+where $h_0(t|Cli)$ is the baseline hazard corresponding to the $Z_1$ = 0 mg/day of daily dose, and $Z_2 = 0$ with no history of prison with corresponding to the clinic Cli.
+
+```{r}
+cox.meth.3 = coxph(s.meth~dose*prison+strata(clinic), data = meth)
+summary(cox.meth.3)
+```
+
+Based on the previous summary, we estimated that the hazard ratio comparing individuals in the same clinic but differed in 1 mg/day (certain amount of dosage vs. 1 mg/day less)in daily maintenance methadone dosage is 1.01 times in the sub population of individuals who have a history of previous incarceration compared to individuals who do not. The 95% CI of this ratio is [0.985, 1.036]. Based on the Wald test, we have a p-value of 0.443. Therefore, we fail to reject the null hypothesis that the ratio of the hazard ratio equals to 1 at the significance level of 0.05.
+
+In order to estimate the hazard ratio comparing patients from a given clinic with a history of
+incarceration receiving 120 mg/day of methadone to patients from the same clinic without a history of
+incarceration receiving 50 mg/day of methadone, we are doing following calculation: 
+
+$$\frac{h(t|Z_1 = 120, Z_2 = 1, Cli) = h_0(t|Cli) \times exp(\beta_1 \times 120 + \beta_2 \times 1+\beta_3 \times 120 \times 1)}{h(t|Z_1 = 50, Z_2 = 0, Cli) = h_0(t|Cli) \times exp(\beta_1 \times 50 + \beta_2 \times 0+\beta_3 \times 50 \times 0)}$$
+with exactly the same notation as before. 
+
+Then the ratio equals to 
+
+$$
+\begin{aligned}
+ R&=\frac{h_0(t|Cli) \times exp(\beta_1 \times 120 + \beta_2 \times 1+\beta_3 \times 120 \times 1)}{ h_0(t|Cli) \times exp(\beta_1 \times 50 + \beta_2 \times 0+\beta_3 \times 50 \times 0)} \\
+ &= \frac{exp(\beta_1 \times 120 + \beta_2 \times 1+\beta_3 \times 120 \times 1)}{exp(\beta_1 \times 50 + \beta_2 \times 0+\beta_3 \times 50 \times 0)}\\
+ &= exp({\beta_1 \times70 +\beta_2+\beta_3 \times 120 })
+\end{aligned}
+$$
+
+Then we use the delta method to obtain CI for $\beta_1 \times70 +\beta_2+\beta_3 \times 120$ and then exponentiation it like what we did in the class: 
+
+```{r}
+dose.est = sum(70*coef(cox.meth.3)[1],coef(cox.meth.3)[2], 120 *coef(cox.meth.3)[3])
+dose.se = deltamethod(g = ~(70*x1+x2+120*x3),mean = coef(cox.meth.3)[c("dose","prison", "dose:prison")],
+                     cov = vcov(cox.meth.3)[c("dose","prison", "dose:prison"),
+                                            c("dose","prison", "dose:prison")])
+exp(dose.est+c(-1,0,1)*1.96*dose.se)
+```
+
+Based on the previous calculation, we estimated the hazard ratio comparing patients from a given clinic with a history of incarceration receiving 120 mg/day of methadone to patients from the same clinic without a history of incarceration receiving 50 mg/day of methadone is 0.178 with a 95% CI as [0.051, 0.619]. 

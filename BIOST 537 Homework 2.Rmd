@@ -1,0 +1,251 @@
+---
+title: "BIOST 537 HOMEWORK2"
+author: "Ivy Zhang"
+date: "1/26/2022"
+output: pdf_document
+---
+
+```{r include = FALSE}
+knitr::opts_chunk$set(message = F, warning = F)
+```
+
+
+# Problem 1
+## Part a
+
+```{r}
+# Problem 1
+library(dplyr)
+library(knitr)
+main_tab = data.frame(time_t = c(0,8,11,14,20,23,28,31,33,45,49,152),
+                      n_k = c(12,12,11,10,9,8,7,6,5,4,2,1),
+                      d_k = c(0,1,1,0,1,1,0,1,1,1,1,0))
+main_tab = main_tab%>%mutate(d_n = round(d_k/n_k,3),
+                             d_n_re = round(1-d_k/n_k,3))
+main_tab = main_tab %>% mutate(s = round(cumprod(d_n_re),3),
+                               h = cumsum(d_n))
+colnames(main_tab) = c("time t","# at risk(n)","# events(d)","d/n","1 - d/n","S(t)","H(t)")
+kable(main_tab)
+control_tab = data.frame(time_t = c(0,3,5,7,10,12,16,25,27,30,38,44,48),
+                         n_k = c(13,13,12,11,9,8,7,6,5,4,3,2,1),
+                         d_k = c(0,1,1,2,0,1,0,1,1,1,1,1,1))
+control_tab = control_tab%>%mutate(d_n = round(d_k/n_k,3),
+                             d_n_re = round(1-d_k/n_k,3))
+control_tab = control_tab %>% mutate(s = round(cumprod(d_n_re),3),
+                               h = cumsum(d_n))
+colnames(control_tab) = c("time t","# at risk(n)","# events(d)","d/n","1 - d/n","S(t)","H(t)")
+kable(control_tab)
+```
+
+## Part(b)
+
+```{r}
+main_close = max(main_tab$`time t`[main_tab$`time t`<=36])
+(main_36 = main_tab[main_tab$`time t` == main_close,"S(t)"])
+control_close = max(control_tab$`time t`[control_tab$`time t`<=36])
+(control_36 = control_tab[control_tab$`time t` == control_close,"S(t)"])
+```
+
+We estimate that the probability that no relapse will occur by 36 months is 0.432 for the maintenance group, and 0.303 for the contro group. 
+
+# Problem 2
+
+## part(a) Plot the Kaplan-Meier estimator of the survival function of the time until exit from maintenance along with pointwise 95% confidence intervals.
+
+```{r message = FALSE}
+
+#Problem 2
+library(readr)
+library(survival)
+library(foreign)
+library(flexsurv)
+library(msm)
+addicts <- read_csv("~/Desktop/R hw/addicts.csv")
+s.addicts = with(addicts, Surv(time, event))
+km.addicts = survfit(s.addicts~1, conf.type = "log-log")
+plot(km.addicts, main = "Kaplan-Meier survivor estimate", ylab = "Survival probability", 
+     xlab = "Time", cex = 0.5)
+summary(km.addicts, times = 365)
+```
+
+Based on the calculation using survfit function, the estimated probability that no exit occur before one year is 0.606 (95% CI: 0.538, 0.667).
+
+## part(b) Provide the estimated median time until exit from maintenance and associated 95% confidence interval by:
+ 
+We first try to look at the Kaplan-Meier graph only to have an estimated median time and its 95% confidence interval. 
+ 
+```{r}
+#b
+median_time = min(km.addicts$time[km.addicts$surv<=0.5], na.rm = TRUE)
+median_time_low = min(km.addicts$time[km.addicts$lower<=0.5],na.rm = TRUE)
+median_time_up = min(km.addicts$time[km.addicts$upper<0.5],na.rm = TRUE)
+(c(median_time, median_time_low, median_time_up))
+```
+
+Our estimated median time is 504, and our estimated 95% confidence intervel for estimated median time is [394.0, 550.0]. It is a interval that includes all values of t such that the test of null hypothesis of S(t) = 0.5 is not rejected at the confidence level of 0.95 using Kaplan-Meier estimation. 504 is the smallest time such that its survival rate is smaller than 0.5.
+
+Then we try to find the median estimate and confidence intervals provided by the survfit command.
+```{r}
+km.addicts
+```
+
+Based on the survfit function, the estimated median time is also 504, with the same 95% confidence interval is [394,550].
+
+## part(c)
+
+We first plotting the Kaplan-Meier estimator of the survival function of the time until exit
+from maintenance for patients with a history of incarceration and for patients without.
+
+```{r}
+#c
+km.addicts.prison = survfit(s.addicts~prison, data = addicts)
+plot(km.addicts.prison, col = c("blue", "orange"))
+legend("topright", c("Without history of incarceration","With hisory of incarceration"), 
+       col = c("blue","orange"), lwd = c(2, 2))
+```
+
+We then want to figure out does the probability that no exit occurred by 8 months differ significantly between these two groups. We will use Wald test to test it. For 8 months, we will transform it to 240 days by using a month of 30 days times 8. 
+
+```{r}
+s <- summary(km.addicts.prison, times = 240)
+diff <- s$surv[1] - s$surv[2]
+se <- sqrt(s$std.err[1]^2 + s$std.err[2]^2)
+diff/se
+(1-pnorm(abs(diff)/se)) * 2
+```
+
+By using the wald test, we have a calculated a wald test statistic value of 1.766 and associated p-value of 0.077 which is larger than 0.05. Therefore, we do not have enough evidence from data to reject the null hypothesis that there is no difference of the probability that no exit occurred by 8 months between these two groups at the significance level of 0.05. 
+
+We then want to use the logrank test to see does the distribution of time until exit from maintenance differ significantly by history of incarceration.
+
+```{r }
+survdiff(s.addicts~prison, data =addicts)
+```
+
+Based on the calculation of the results of the logrank test, we can see we have a calculated chi-square statistics of 1.3 and associated p-value of 0.3 which is larger than 0.05. Therefore, we do not have enough evidence from the data to reject the null hypothesis that the distribution of time until exit from maintenance are same by history of incarceration at the significance level of 0.05. 
+
+Then we try to usethe Wilcoxon-Gehan-Breslow test to see does the distribution of time until exit from maintenance differ significantly by history of incarceration. 
+
+```{r}
+library(survMisc)
+comp(ten(km.addicts.prison))$testes$lrTests
+(1-pnorm(abs(1.59962)))*2
+```
+
+Based on the calculation, we can see that the Wilcoxon-Gehan-Breslow test gave us a Z-value of 1.59962 which gave us a two-sided p-value that is 0.1096829. Therefore, based on the Wilcoxon-Gehan-Breslow test, we do not have evidence from the data to reject null hypothesis that there is no difference between the distribution of time until exit from maintenance in two groups with different history of incarceration. 
+
+Then we are going to plot the estimated hazard functions for patients with and without a history of incarceration. 
+
+```{r}
+plot(km.addicts.prison, col = c("blue", "orange"), fun = "cumhaz",xlab = "Time(in days)", 
+     main = "Nelson-Aalen cumulative hazard estimate", ylab = "Cumulative hazard")
+legend("topleft", c("Without history of incarceration","With hisory of incarceration"), 
+       col = c("blue","orange"), lwd = c(2, 2))
+```
+
+As we can see from the plot, the cumulative hazard distribution does not seem much differ and the hazard function are crossing. Therefore, it may lead the log-rank test has less power, and therefore give us a relatively large p-value. Wilcoxon-Gehan-Breslow tests gave us relatively larger test statistics and smaller p-value compared to standard log-rank test.It may because Wilcoxon-Gehan-Breslow may weight the earlier stage more than the log-rank test and the cumulative hazard function of the two group differ moreat the earlier stage. These two curves may not differ much enough to actually for both two tests to detetect the significantly difference. 
+
+## part(d)
+
+
+We first dictomize an indicator variable showing whether the participant is having more than 60mg of methadone and then plot the Kaplan-Meier estimator of the survival function of the time until exit
+from maintenance for patients in these two groups differed by this indicator.
+
+```{r}
+#d
+addicts$do60 = addicts$dose>60
+km.addicts.dose = survfit(s.addicts~do60, data = addicts)
+plot(km.addicts.dose, col = c("blue", "orange"))
+legend("topright", c("Patients administered no more than 60g/day",
+                     "Patients administered more than 60g/day"), 
+       col = c("blue","orange"), lwd = c(2, 2))
+```
+
+We then want to figure out does the probability that no exit occurred by 8 months differ significantly between these two groups. We will use Wald test to test it. For 8 months, we will transform it to 243.33 days by using a month of 30 days times 8. 
+
+```{r}
+s <- summary(km.addicts.dose, times = 240)
+diff <- s$surv[1] - s$surv[2]
+se <- sqrt(s$std.err[1]^2 + s$std.err[2]^2)
+diff/se
+(1-pnorm(abs(diff)/se, lower.tail = T)) * 2
+```
+
+By using the wald test, we have a wald test statistics value of -4.319 and associated calculated p-value of $1.568 \times 10^{-5}$ which is much smaller than 0.05. Therefore, we do have enough evidence from data to reject the null hypothesis that there is no difference of the probability that no exit occurred by 8 months between these two groups at the significance level of 0.05. 
+
+We then want to use the logrank test to see does the distribution of time until exit from maintenance differ significantly by high dose of methadone.
+
+```{r}
+survdiff(s.addicts~do60, data =addicts)
+```
+
+Based on the calculation of the results of the logrank test, we can see we have a calculated chi-square statistics of 26.5 and associated p-value of $3 \times 10^{-7}$ which is much smaller than 0.05. Therefore, we do have enough evidence from the data to reject the null hypothesis that the distribution of time until exit from maintenance are same by history of incarceration at the significance level of 0.05. 
+
+Then we try to usethe Wilcoxon-Gehan-Breslow test to see does the distribution of time until exit from maintenance differ significantly by history of incarceration. 
+
+```{r}
+comp(ten(km.addicts.dose))$testes$lrTests
+(1-pnorm(abs(-4.9534)))*2
+```
+
+Based on the calculation, we can see that the Wilcoxon-Gehan-Breslow test gave us a Z-value of -4.9534 which gave us a two-sided p-value that is $7.293 \times 10^{-7}$. Therefore, based on the Wilcoxon-Gehan-Breslow test, we have evidence from the data to reject null hypothesis that there is no difference between the distribution of time until exit from maintenance in two groups with whether the participant have high dose of methadone. 
+
+Then we are going to plot the estimated hazard functions for patients with and without having more than 60 mg/day of methadone. 
+
+```{r}
+plot(km.addicts.dose, col = c("blue", "orange"), fun = "cumhaz",xlab = "Time(in days)", 
+     main = "Nelson-Aalen cumulative hazard estimate", ylab = "Cumulative hazard")
+legend("topleft", c("Patients administered no more than 60g/day",
+                     "Patients administered more than 60g/day"), 
+       col = c("blue","orange"), lwd = c(2, 2))
+```
+
+As we can see from the plot, the cumulative hazard distribution doesseem  different and the hazard function are not crossing. Therefore, it may lead the log-rank test has similar p-value as Wilcoxon-Gehan-Breslow tests gave us based on the two test statistics magnitude. These two curves differ enough to for both two tests to detect the significantly difference. 
+
+# Part(e) 
+
+
+```{r}
+#e
+survdiff(s.addicts~prison+strata(clinic), data = addicts)
+
+```
+
+Our null hypothesis for stratified logrank test is the distribution of the time until exit from maintenance dose not differ by history of previous incarceration if the participants are from same clinic for all clinic.
+
+Our null hypothesis for standard logrank test is the distribution of the time until exit from maintenance dose not differ by history of previous incarceration. The difference is the standard logrank test is not comparing the individuals with different incarceration history inside one clinic, which is not adjusting for the potential confounding effect of clinic. 
+
+Our alternative hypothesis for the stratified logrank test is at least for one clinic, the distribution of the time until exit from maintenance differ by history of precious incarceration even the participants are from same clinic. 
+
+Our alternative hypothesis for the standard logrank test is the distribution of the time until exit from maintenance differ by history of precious incarceration. The difference is the standard logrank test does not have the condition of comparing individuals within the same clinic. 
+
+Based on a stratified logrank test, we have a chi-square test statistic of 4 and associated p-value of 0.04. Therefore, the data does not provide enough evidence for us to reject the null hypothesis for stratified logrank test at the significance level of 0.05. 
+
+# Part(f)
+
+We estimated the median residual time by finding the time that is having half survival rate as the time already does and use that time to subtract with the time. The table is showing my estimation and the estimation calculated by the designed R function. 
+
+```{r}
+source("getmedianres.R")
+calc_res = function(time){
+  s = summary(km.addicts, times = time)$surv * 0.5
+  med_time = min(km.addicts$time[km.addicts$surv < s])
+  res_time = med_time - time
+  return(res_time)
+}
+tab2 = matrix(nrow = 3, ncol =6)
+tab2[,1] = c(4,8,12)
+tab2[,2] = c(120,240,365)
+tab2[1,3] = calc_res(120)
+tab2[2,3] = calc_res(240)
+tab2[3,3] = calc_res(365)
+getrem.120 =getmedianres(s.addicts, times = 120, confint = TRUE)
+getrem.240 = getmedianres(s.addicts, times = 240, confint = TRUE)
+getrem.365 = getmedianres(s.addicts, times = 365, confint = TRUE)
+tab2[1,4:6] = c(getrem.120$estimates, getrem.120$ci.lower, getrem.120$ci.upper)
+tab2[2,4:6] = c(getrem.240$estimates, getrem.240$ci.lower, getrem.240$ci.upper)
+tab2[3,4:6] = c(getrem.365$estimates, getrem.365$ci.lower, getrem.365$ci.upper)
+colnames(tab2) = c("Months", "Days", "Kaplan-Meier Estimator","R Estimator","95% CI Low","95% CI High")
+kable(tab2)
+```
+
